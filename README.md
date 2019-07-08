@@ -1,3 +1,57 @@
+# Links
+
+* v8 - https://v8.dev/docs
+
+
+
+```raw
+lib
+├── egg.js
+├── lifecycle.js
+├── loader
+│   ├── context_loader.js
+│   ├── egg_loader.js
+│   ├── file_loader.js
+│   └── mixin
+│       ├── config.js
+│       ├── controller.js
+│       ├── custom.js
+│       ├── custom_loader.js
+│       ├── extend.js
+│       ├── middleware.js
+│       ├── plugin.js
+│       ├── router.js
+│       └── service.js
+└── utils
+    ├── base_context_class.js   // 鬼知道是干啥的? 通过名字猜
+    ├── index.js                // 定义了一些loadFile, error stack, etc...方法
+    ├── sequencify.js           // 用于收集任务的执行顺序的, 带有依赖任务的执行顺序的那种
+    └── timing.js               // 记录每个pid timing的util
+```
+
+
+
+esmodule
+```js
+// 原来esmodule是搞这个事情
+if (obj.__esModule) return 'default' in obj ? obj.default : obj;
+```
+
+### sequencify.js 执行顺序, 
+主要看代码
+* 从顶部开始以names遍历, 沿着dependencies往下走,
+* 任何cyclular dep被记录, 访问的parent节点被记录
+* reach to leaf node, set result[name] = true, 记录这个任务必须执行, push 到任务队列里边
+* 然后将parent再push到任务队列里边. 总体就是一个将树的深度遍历, 至不过执行顺序会将parent节点下的children节点先行遍历一遍.
+
+
+
+
+
+
+
+
+
 # egg-core
 
 [![NPM version][npm-image]][npm-url]
