@@ -95,7 +95,7 @@ if (obj.__esModule) return 'default' in obj ? obj.default : obj;
 fullPath = require.resolve(filepath);
 ```
 
-### 启动顺序
+### 启动顺序(具体的顺序要看eggjs外层的包装库是怎么实现的)
 
 ```js
         app.Helper = class Helper {};
