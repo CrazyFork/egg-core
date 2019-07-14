@@ -1,17 +1,69 @@
+
+# 目标
+* 公司用, 所以就读下, eggjs文档毕竟还有很多事情没有交代清楚
+* how unit test are structured
+
 # Links
 
 * v8 - https://v8.dev/docs
+
+##
+
+-> lifecycle 的设计:
+里边用了很多异步事件驱动的; 代码逻辑结构跳来跳去的. 非常不能理解为啥这么设计(到现在也没看懂 :(, 
+我理解启动阶段有问题就退出, 应该是同步的代码结构. 真的是...
+
+设计比较令人难理解的是, 如果我没有猜错 lifecycle.js 中的代码, (看下面) Boots 数组里边应该只允许有一个
+Boot 实例才对; 要不然这个 get-ready 的库真的要区分多个boot全部ok, 才call `this.loadReady` .  但这个感觉就不可能
+算了, 不纠结了.
+
+```js
+triggerDidLoad() {
+  debug('register didLoad');
+  for (const boot of this[BOOTS]) {
+    const didLoad = boot.didLoad && boot.didLoad.bind(boot);
+    if (didLoad) {
+      // 到下一阶段
+      this[REGISTER_READY_CALLBACK](didLoad, this.loadReady, 'Did Load');
+    }
+  }
+}
+```
+
+-> make middleware private
+
+
+```js
+
+    const middlewarePaths = opt.directory;
+    this.loadToApp(middlewarePaths, 'middlewares', opt);
+
+    for (const name in app.middlewares) {
+      // using defineProperty to make app.middleware unsettable.
+      Object.defineProperty(app.middleware, name, {
+        get() {
+          return app.middlewares[name];
+        },
+        enumerable: false, // neccessary, but why ?
+        configurable: false,
+      });
+    }
+```
+
+-> debugging, using debug lib
+app.logger are fit for application developer usage, while if you are a lib developer, it's much more appropriate to use
+this debug lib.
 
 
 
 ```raw
 lib
-├── egg.js
-├── lifecycle.js
+├── egg.js                     // Koa Application 的子类; 可以理解为一个Application; fields 包括 context, controller, service, 还有路由的一些方法
+├── lifecycle.js               // lifecycle 的methods, 统管lifecycle, 包括对应的 Hook 实例的注入和trigger in different lifecycle stage
 ├── loader
 │   ├── context_loader.js
-│   ├── egg_loader.js
-│   ├── file_loader.js
+│   ├── egg_loader.js          // egg 的核心loader, 
+│   ├── file_loader.js         // loader 的核心; 底层嵌入了nodejs loader; 会对对应目录下文件(glob)形式解析; 然后将文件目录转换成props注入到target的属性上面, 对应inject的对象也会被注入到文件里边, 一参数的形式
 │   └── mixin
 │       ├── config.js
 │       ├── controller.js
@@ -31,11 +83,39 @@ lib
 
 
 
+
+
 esmodule
 ```js
 // 原来esmodule是搞这个事情
 if (obj.__esModule) return 'default' in obj ? obj.default : obj;
+
+
+// bm
+fullPath = require.resolve(filepath);
 ```
+
+### 启动顺序
+
+```js
+        app.Helper = class Helper {};
+        app.loader.loadPlugin();
+        app.loader.loadConfig();
+        app.loader.loadApplicationExtend();
+        app.loader.loadAgentExtend();
+        app.loader.loadRequestExtend();
+        app.loader.loadResponseExtend();
+        app.loader.loadContextExtend();
+        app.loader.loadHelperExtend();
+        app.loader.loadCustomApp();
+        app.loader.loadService();
+        app.loader.loadController();
+        app.loader.loadRouter();
+        app.loader.loadPlugin();
+        app.loader.loadMiddleware();
+```
+
+
 
 ### sequencify.js 执行顺序, 
 主要看代码
@@ -45,11 +125,113 @@ if (obj.__esModule) return 'default' in obj ? obj.default : obj;
 * 然后将parent再push到任务队列里边. 总体就是一个将树的深度遍历, 至不过执行顺序会将parent节点下的children节点先行遍历一遍.
 
 
+### 配置的注入顺序
+
+defined in config.js, loadConfig()
+代码我总看的虚, 关于middleware的注入配置; 详细看源码; 主要就是说array的配置, 同样的index会被override掉
+
+注意覆盖顺序是从下往上. 下面优先级最高
+```js
+
+    //   plugin config.default
+    //     framework config.default
+    //       app config.default
+    //         plugin config.{env}
+    //           framework config.{env}
+    //             app config.{env}
+```
+
+
+### plugin 的执行顺序
+执行顺序就是按照sequencify 的执行顺序走的; 无非就是会设置对应的plugin的禁用状态;
+
+define in plugins.js
+` getOrderPlugins(allPlugins, enabledPluginNames, appPlugins) { `
+
+
+```js
+
+this._extendPlugins(this.allPlugins, eggPlugins);
+this._extendPlugins(this.allPlugins, appPlugins);
+this._extendPlugins(this.allPlugins, customPlugins);
+// 虽然上边那么走; 但是for in 遍历的顺序是没法保证的
+for (const name in this.allPlugins) {
+  // 解析插件的完整路径
+
+  ...
+}
+// 插件的顺序, 按照for in的顺序, 解析第一个插件的dep叶节点的插件执行
+// 解析依赖; implicit 依赖; missing 依赖, 统一格式化依赖路径...
+sequencify(plugins...)
+
+
+```
+
+
+### egg loader
+
+```js
+// 文件的组织形式, prototype的继承
+const loaders = [
+  require('./mixin/plugin'),
+  require('./mixin/config'),
+  require('./mixin/extend'),
+  require('./mixin/custom'),
+  require('./mixin/service'),
+  require('./mixin/middleware'),
+  require('./mixin/controller'),
+  require('./mixin/router'),
+  require('./mixin/custom_loader'),
+];
+
+for (const loader of loaders) {
+  Object.assign(EggLoader.prototype, loader);
+}
+```
+
+### middleware 的注入顺序
+
+middleware 注入顺序是 coreMiddlewares -> app middlewares, 
+
+-> middleware 的限制, 
+* 只有framework 有能力注入coreMiddleware.
+* plugin 只允许定义middleware, app 决定用哪些
+
+```js
+    if (isPlugin || isApp) {
+      assert(!config.coreMiddleware, 'Can not define coreMiddleware in app or plugin');
+    }
+    if (!isApp) {
+      assert(!config.middleware, 'Can not define middleware in ' + filepath);
+    }
+```
+
+### router 的生效时机
+?也就是说要在beforeStart前执行.
+A: 不是的, middleware 注入了, 后面随便调用 `app.use`
+
+真正的注入时机实在beforeStart之后,  https://eggjs.org/en/advanced/loader.html, 看app的时机图.
+
+
+```js
+get router() {
+  if (this[ROUTER]) {
+    return this[ROUTER];
+  }
+  const router = this[ROUTER] = new Router({ sensitive: true }, this);
+  // register router middleware
+  this.beforeStart(() => {
+    this.use(router.middleware());
+  });
+  return router;
+}
 
 
 
-
-
+registerBeforeStart(scope) {
+  this[REGISTER_READY_CALLBACK](scope, this.loadReady, 'Before Start');
+}
+```
 
 
 # egg-core
