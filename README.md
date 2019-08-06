@@ -65,8 +65,8 @@ lib
 │   ├── egg_loader.js          // egg 的核心loader, 
 │   ├── file_loader.js         // loader 的核心; 底层嵌入了nodejs loader; 会对对应目录下文件(glob)形式解析; 然后将文件目录转换成props注入到target的属性上面, 对应inject的对象也会被注入到文件里边, 一参数的形式
 │   └── mixin
-│       ├── config.js
-│       ├── controller.js
+│       ├── config.js         // 加载config, 
+│       ├── controller.js     // 用来加载controller
 │       ├── custom.js
 │       ├── custom_loader.js
 │       ├── extend.js
@@ -76,7 +76,7 @@ lib
 │       └── service.js
 └── utils
     ├── base_context_class.js   // 鬼知道是干啥的? 通过名字猜
-    ├── index.js                // 定义了一些loadFile, error stack, etc...方法
+    ├── index.js                // 定义了一些loadFile, error stack, etc...方法; loadFile 只会两种状态buffer文件内容; js解析后的exports
     ├── sequencify.js           // 用于收集任务的执行顺序的, 带有依赖任务的执行顺序的那种
     └── timing.js               // 记录每个pid timing的util
 ```
@@ -144,10 +144,44 @@ defined in config.js, loadConfig()
 
 ### plugin 的执行顺序
 执行顺序就是按照sequencify 的执行顺序走的; 无非就是会设置对应的plugin的禁用状态;
+### Hook, BootHook
+```
+class Hook {
+  constructor(app) {
+    this.app = app;
+  }
+  configDidLoad() {
+    hook(this.app);
+  }
+}
+```
+
+* beforeClose, 可以在app进行关闭前的hook, 会被执行
+
+
+### lifecycle 
+
+
+```
+// 生命周期和boot明确相关; 每个boot的生命周期函数会被扔在this[REGISTER_READY_CALLBACK]函数处理
+  triggerWillReady() {
+    debug('register willReady');
+    this.bootReady.start();
+    for (const boot of this[BOOTS]) {
+      const willReady = boot.willReady && boot.willReady.bind(boot);
+      if (willReady) {
+        this[REGISTER_READY_CALLBACK](willReady, this.bootReady, 'Will Ready');
+      }
+    }
+  }
+```
+
+
 
 define in plugins.js
 ` getOrderPlugins(allPlugins, enabledPluginNames, appPlugins) { `
 
+## third party libs
 
 ```js
 
